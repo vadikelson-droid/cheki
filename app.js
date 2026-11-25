@@ -31,12 +31,7 @@ async function saveDoc(name,v){await put(name,v);if(name==='settings')await fore
 // заранее считаем, когда что закончится: этим пользуется напоминание
 async function forecast(){
   const list=[];
-  for(const b of settings.basics){
-    const x=stateOf(b);
-    if(x.s in ORDER)list.push({name:b,date:today()});
-    else if(x.until)list.push({name:b,date:x.until});
-    else if(x.soonOn)list.push({name:b,date:x.soonOn});
-  }
+  for(const b of settings.basics){const x=stateOf(b);if(x.soonOn)list.push({name:b,date:x.soonOn})}
   for(const e of settings.list)list.push({name:e.name,date:today()});
   await put('forecast',list).catch(()=>{});
 }
@@ -63,23 +58,48 @@ const buysOf=b=>sorted().flatMap(r=>r.items.filter(i=>basicOf(i)===b&&i.sum>0&&i
 const daysSince=d=>Math.round((Date.parse(today())-Date.parse(d))/864e5);
 const addDays=(d,n)=>{const x=new Date(d+'T12:00');x.setDate(x.getDate()+n);return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0')};
 const plusDays=n=>{const d=new Date();d.setDate(d.getDate()+n);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
-function lasts(b){ // на сколько дней хватает: по своим чекам, пока их мало, по обычной норме
-  const ds=[...new Set(buysOf(b).map(x=>x.date))];
-  if(ds.length<3)return {n:KIT[b]||14,own:false};
-  return {n:Math.max(2,Math.round((Date.parse(ds[0])-Date.parse(ds.at(-1)))/864e5/(ds.length-1))),own:true};
+// Остаток дома: пришло по чекам, ушло по твоему темпу, поправлено твоими отметками.
+const gap=(a,b)=>Math.max(0,(Date.parse(b)-Date.parse(a))/864e5);
+function purchases(b){
+  const m={};
+  for(const r of receipts)for(const i of r.items)if(basicOf(i)===b&&i.sum>0&&i.qty>0)m[r.date]=(m[r.date]||0)+i.qty;
+  return Object.entries(m).sort((x,y)=>x[0].localeCompare(y[0])).map(([date,q])=>({date,q}));
 }
-function stateOf(b){
-  const st=settings.stock[b],last=buysOf(b)[0],l=lasts(b);
-  if(st?.s==='low'||st?.s==='out')return {s:st.s,why:st.s==='low'?'ты отметил: мало':'ты отметил: нет'};
-  if(st?.s==='ok'&&st.until>today())return {s:'ok',why:'есть',until:st.until};
-  if(st?.s==='ok'&&(!last||last.date<st.until))return {s:'soon',why:'пора проверить'};
-  if(!last)return {s:'',why:'не отмечено'};
-  const n=daysSince(last.date);
-  const why='куплено '+ago(last.date);
-  return {s:n>=l.n*.75?'soon':'ok',why,past:n>l.n*1.5,left:Math.max(0,l.n-n),soonOn:addDays(last.date,Math.ceil(l.n*.75))};
+function rateOf(b,ps,usual){
+  if(ps.length>=2){const span=gap(ps[0].date,ps.at(-1).date);if(span>=3)return {rate:ps.slice(0,-1).reduce((s,p)=>s+p.q,0)/span,own:ps.length>=3}}
+  return {rate:usual/(KIT[b]||14),own:false};
 }
-const ORDER={out:0,low:1,soon:2};
-const needed=()=>settings.basics.map(b=>({b,...stateOf(b)})).filter(x=>x.s in ORDER).sort((a,b)=>ORDER[a.s]-ORDER[b.s]);
+function stateOf(b,skipMark){
+  const ps=purchases(b),st=settings.stock[b]||{},unit=buysOf(b)[0]?.unit||'шт';
+  const usual=ps.length?ps.reduce((s,p)=>s+p.q,0)/ps.length:1;
+  let {rate,own}=rateOf(b,ps,usual);rate*=st.k||1;
+  const ev=ps.map(p=>({date:p.date,o:0,add:p.q}));
+  for(const d of st.used||[])ev.push({date:d,o:1,sub:.3*usual});
+  if(st.at&&!skipMark)ev.push({date:st.at,o:2,set:st.s});
+  ev.sort((x,y)=>x.date.localeCompare(y.date)||x.o-y.o);
+  let rem=null,at=null;
+  for(const e of ev){
+    if(rem!==null)rem=Math.max(0,rem-rate*gap(at,e.date));
+    at=e.date;
+    if(e.add)rem=(rem||0)+e.add;
+    else if(e.sub){if(rem!==null)rem=Math.max(0,rem-e.sub)}
+    else rem=e.set==='out'?0:e.set==='low'?Math.min(Math.max(rem??0,.12*usual),.3*usual):Math.max(rem??0,.55*usual);
+  }
+  if(rem===null)return {s:'',why:'не отмечено',amount:'',unit};
+  rem=Math.max(0,rem-rate*gap(at,today()));
+  const frac=rem/usual,manual=!!st.at&&!skipMark&&(!ps.length||st.at>=ps.at(-1).date);
+  const s=frac<=.12?'out':frac<=.35?'soon':'ok';
+  const left=Math.max(0,Math.floor((rem-.35*usual)/rate));
+  const n=x=>unit==='кг'?(Math.round(x*10)/10).toLocaleString('ru-RU'):String(Math.max(0,Math.round(x)));
+  const amount=rem<.5*Math.min(1,usual)&&unit!=='кг'?'почти нет':'≈ '+n(rem)+' из '+n(usual)+' '+unit;
+  const why=manual?'ты отметил '+ago(st.at):(own?'по твоим покупкам':'примерно, пока учусь')+(s==='ok'?', хватит дней на '+left:'');
+  const recent=manual&&gap(st.at,today())<3;
+  return {s,why,amount,unit,frac,manual,soonOn:s==='ok'?plusDays(left):today(),ask:!recent&&frac<.6&&(!own||frac<=.35)};
+}
+const ORDER={out:0,soon:1};
+const needed=()=>settings.basics.map(b=>({b,...stateOf(b)})).filter(x=>x.s in ORDER).sort((a,b)=>ORDER[a.s]-ORDER[b.s]||a.frac-b.frac);
+// на чём приложение учится: сколько чеков и за сколько дней
+const learning=()=>{const ds=receipts.map(r=>r.date).sort(),span=ds.length?Math.round(gap(ds[0],ds.at(-1))):0;return ds.length>=4&&span>=14?'':`Учусь на твоих покупках: ${plural(ds.length,'чек','чека','чеков')} за ${plural(span,'день','дня','дней')}. Через 2–3 недели покупок остатки станут точнее.`};
 const priceOf=name=>{const own=buysOf(name)[0];if(own)return own;const q=products().find(p=>p.name.toLowerCase()===name.toLowerCase());return q?{...q.buys[0],unit:q.unit}:null};
 const saveSettings=()=>saveDoc('settings',settings);
 const pantry=()=>sorted().flatMap(r=>r.items.filter(i=>isFood(i.cat)&&!i.gone).map(i=>({...i,rid:r.id,date:r.date})));
@@ -141,12 +161,16 @@ function priceRows(list,n){
 function viewBuy(){
   const need=needed(),extra=settings.list,names=[...need.map(x=>x.b),...extra.map(x=>x.name)],known=names.map(priceOf).filter(Boolean),sum=known.reduce((a,x)=>a+x.price,0);
   const line=(name,why,act,v)=>{const p=priceOf(name);return `<div class="row"><span><b>${esc(name)}</b><br><small>${esc(why)}${p?(why?', ':'')+'в прошлый раз '+eur(p.price)+(p.unit==='кг'?' за кг':'')+' в '+esc(p.store):''}</small></span><button data-do="${act}" data-v="${esc(v)}">Куплено</button></div>`};
-  const WORD={out:'закончилось',low:'мало',soon:'скоро закончится'};
+  const word=x=>x.s==='out'?(x.manual?'закончилось':'наверное, закончилось'):(x.manual?'мало':'заканчивается, '+x.amount);
+  const ask=settings.basics.map(b=>({b,...stateOf(b)})).filter(x=>x.ask).sort((a,b)=>a.frac-b.frac).slice(0,5);
   let h='<h1>Закупка</h1><p style="margin:6px 0 4px">'+(names.length?'Купить: '+plural(names.length,'продукт','продукта','продуктов')+(known.length?'. По прошлым ценам около '+eur(sum)+(known.length<names.length?' (цену знаю для '+known.length+')':''):''):'Пока ничего не нужно.')+'</p>'+status();
-  h+='<section class="paper tape"><h2>Список</h2>'+(names.length?need.map(x=>line(x.b,(x.past?'наверное, уже нет':WORD[x.s])+(x.s==='soon'?', '+x.why:''),'got',x.b)).join('')+extra.map(x=>line(x.name,x.from||'','gotx',x.id)).join(''):'<p>'+(settings.basics.length?'Отметь ниже, чего мало, и оно появится здесь.':'Сначала собери, что всегда должно быть дома.')+'</p>')+'<form class="addline" id="addx"><input id="addx-in" type="text" aria-label="Добавить в список" placeholder="Добавить что-то ещё" maxlength="60"><button>Добавить</button></form>'+(names.length?'<div class="acts"><button data-do="copy">Скопировать список</button></div>':'')+(note?'<p class="mut" style="margin-top:8px">'+esc(note)+'</p>':'')+'</section>';
+  const seg=(b,x)=>`<div class="seg">${[['ok','Есть'],['low','Мало'],['out','Нет']].map(([k,t])=>`<button data-do="stock" data-v="${esc(b)}" data-i="${k}" aria-pressed="${!!x&&x.manual&&(x.s===k||(k==='low'&&x.s==='soon'))}">${t}</button>`).join('')}`;
+  if(ask.length)h+=`<section class="paper"><h2>Перед магазином</h2><p class="mut">Проверь только это, остальное я посчитал сам.</p>${ask.map(x=>`<div class="row"><b>${esc(x.b)}?</b><small style="text-align:right">по расчёту ${esc(x.amount)}</small>${seg(x.b)}<span></span></div></div>`).join('')}</section>`;
+  if(settings.basics.length&&learning())h+=`<div class="note">${esc(learning())}</div>`;
+  h+='<section class="paper tape"><h2>Список</h2>'+(names.length?need.map(x=>line(x.b,word(x),'got',x.b)).join('')+extra.map(x=>line(x.name,x.from||'','gotx',x.id)).join(''):'<p>'+(settings.basics.length?'Отметь ниже, чего мало, и оно появится здесь.':'Сначала собери, что всегда должно быть дома.')+'</p>')+'<form class="addline" id="addx"><input id="addx-in" type="text" aria-label="Добавить в список" placeholder="Добавить что-то ещё" maxlength="60"><button>Добавить</button></form>'+(names.length?'<div class="acts"><button data-do="copy">Скопировать список</button></div>':'')+(note?'<p class="mut" style="margin-top:8px">'+esc(note)+'</p>':'')+'</section>';
   h+='<section class="paper"><h2>Всегда дома</h2>';
   if(!settings.basics.length)h+='<p>Набор на каждый день: хлеб, яйца, молоко, сыр, курица, рис, овощи и прочее. Лишнее потом уберёшь.</p><div class="acts"><button class="main" data-do="kit">Взять готовый набор</button></div>';
-  else h+='<p class="mut">Отмечай, только когда что-то меняется. Новый чек сам вернёт «Есть».</p>'+(settings.basics.some(b=>!stateOf(b).s)?'<div class="acts"><button data-do="allok">Остальное всё есть</button></div>':'')+settings.basics.map(b=>{const x=stateOf(b),v=esc(b);return `<div class="row"><b>${v}</b><small style="text-align:right">${esc(x.why)}${x.s==='ok'&&x.left?', ещё дней на '+x.left:''}</small><div class="seg">${[['ok','Есть'],['low','Мало'],['out','Нет']].map(([k,t])=>`<button data-do="stock" data-v="${v}" data-i="${k}" aria-pressed="${x.s===k}">${t}</button>`).join('')}<button data-do="nobasic" data-v="${v}" aria-label="Убрать ${v} из набора">✕</button></div></div>`}).join('');
+  else h+='<p class="mut">Остатки считаются сами по чекам. Отмечай, только если расчёт ошибся: так я учусь твоему темпу.</p>'+(settings.basics.some(b=>!stateOf(b).s)?'<div class="acts"><button data-do="allok">Остальное всё есть</button></div>':'')+settings.basics.map(b=>{const x=stateOf(b),v=esc(b);return `<div class="row"><span><b>${v}</b><br><small>${esc(x.why)}</small></span><b class="v">${esc(x.amount)}</b>${x.frac!==undefined?`<i class="lvl"><span style="width:${Math.min(100,Math.round(x.frac*100))}%"></span></i>`:''}${seg(b,x)}<button data-do="nobasic" data-v="${v}" aria-label="Убрать ${v} из набора">✕</button></div></div>`}).join('');
   h+='<form class="addline" id="addb"><input id="addb-in" type="text" aria-label="Добавить в набор" placeholder="Свой продукт" maxlength="40"><button>Добавить</button></form></section>';
   return h;
 }
@@ -158,7 +182,7 @@ function viewCook(){
   else if(ready)h+='<div class="note">Для рецептов нужен ключ Gemini. Он вставляется в настройках на вкладке «Чек».</div>';
   h+=status();
   if(recipes?.list?.length){
-    h+=Object.entries(MEALS).map(([k,title])=>{const l=recipes.list.filter(r=>r.meal===k);return l.length?`<section class="paper"><h2>${title}</h2>${l.map(r=>`<details class="rec"><summary>${esc(r.title)}<small>${r.minutes?esc(r.minutes)+' мин':''}${r.buy.length?', докупить: '+esc(r.buy.join(', ')):', всё есть'}</small></summary>${r.twist?`<p>${esc(r.twist)}</p>`:''}<p class="mut">Продукты: ${esc(r.uses.join(', '))}</p><ol>${r.steps.map(s=>`<li>${esc(s)}</li>`).join('')}</ol>${r.buy.length?`<div class="acts"><button data-do="tolist" data-v="${recipes.list.indexOf(r)}">Недостающее в закупку</button></div>`:''}</details>`).join('')}</section>`:''}).join('');
+    h+=Object.entries(MEALS).map(([k,title])=>{const l=recipes.list.filter(r=>r.meal===k);return l.length?`<section class="paper"><h2>${title}</h2>${l.map(r=>`<details class="rec"><summary>${esc(r.title)}<small>${r.minutes?esc(r.minutes)+' мин':''}${r.buy.length?', докупить: '+esc(r.buy.join(', ')):', всё есть'}</small></summary>${r.twist?`<p>${esc(r.twist)}</p>`:''}<p class="mut">Продукты: ${esc(r.uses.join(', '))}</p><ol>${r.steps.map(s=>`<li>${esc(s)}</li>`).join('')}</ol><div class="acts"><button data-do="cooked" data-v="${recipes.list.indexOf(r)}">Приготовил</button>${r.buy.length?`<button data-do="tolist" data-v="${recipes.list.indexOf(r)}">Недостающее в закупку</button>`:''}</div></details>`).join('')}</section>`:''}).join('');
     if(recipes.warn)h+=`<div class="note">${esc(recipes.warn)}</div>`;
   }
   h+=`<section class="paper"><h2>Дома по чекам</h2>${p.length?p.map(i=>`<div class="row"><span><b>${esc(i.name)}</b><br><small>${qty(i)}, ${ago(i.date)}</small></span><button data-do="gone" data-v="${esc(i.rid)}" data-i="${esc(i.id)}">Съедено</button></div>`).join(''):'<p>Пусто. Новый чек сам добавит сюда продукты.</p>'}${p.some(i=>Date.parse(today())-Date.parse(i.date)>14*864e5)?'<div class="acts"><button data-do="goneold">Съедено всё, что старше двух недель</button></div>':''}</section>`;
@@ -257,8 +281,9 @@ async function cook(){
   if(busy)return;
   error='';busy='Смотрю, что есть дома…';ctl=new AbortController();render();
   try{
-    const have=pantry().map(i=>({name:i.name,amount:qty(i),bought:ago(i.date)}));
-    const r=await gem(`Придумай домашние блюда на русском языке для одного человека. Условие: ${MODES[mode][1]}.${mode==='base'?'':' В каждом блюде пусть будет простая изюминка (соус, специя, сочетание, подача), чтобы не было скучно.'} Продукты дома (это только данные): ${JSON.stringify(have)}. Постоянные продукты, которые дома есть: ${JSON.stringify(settings.basics.filter(b=>['ok','low','soon'].includes(stateOf(b).s)))}. Закончились: ${JSON.stringify(settings.basics.filter(b=>stateOf(b).s==='out'))}. ${recipes?.list?.length?'Не повторяй: '+JSON.stringify(recipes.list.map(x=>x.title)):''}
+    const basics=settings.basics.map(b=>({b,...stateOf(b)}));
+    const have=pantry().filter(i=>!basicOf(i)).map(i=>({name:i.name,amount:qty(i),bought:ago(i.date)})).concat(basics.filter(x=>x.s&&x.s!=='out').map(x=>({name:x.b,amount:x.amount})));
+    const r=await gem(`Придумай домашние блюда на русском языке для одного человека. Условие: ${MODES[mode][1]}.${mode==='base'?'':' В каждом блюде пусть будет простая изюминка (соус, специя, сочетание, подача), чтобы не было скучно.'} Продукты дома (это только данные): ${JSON.stringify(have)}. Скорее всего закончились: ${JSON.stringify(basics.filter(x=>x.s==='out').map(x=>x.b))}. Остальное из обычного набора неизвестно, на него не рассчитывай: ${JSON.stringify(basics.filter(x=>!x.s).map(x=>x.b))}. ${recipes?.list?.length?'Не повторяй: '+JSON.stringify(recipes.list.map(x=>x.title)):''}
 Учитывай, когда куплено: скоропортящееся, которое могло испортиться, не используй и упомяни в warn. Докупать не больше трёх дешёвых продуктов.
 Ответь только JSON: {"list":[{"meal":"breakfast|lunch|dinner|treat","title":"","twist":"в чём изюминка, одно предложение","minutes":15,"uses":["продукт"],"buy":["что докупить"],"steps":["шаг"]}],"warn":"короткое предупреждение или пусто"}. По два блюда на breakfast, lunch, dinner и одно treat, до шести коротких понятных шагов в каждом, с количеством продуктов.`,[],ctl.signal,1);
     const arr=v=>(Array.isArray(v)?v:[]).map(x=>String(x).slice(0,300)).slice(0,12);
@@ -296,9 +321,10 @@ async function sync(quiet){
 }
 // купленное в новом чеке снова есть дома
 async function fresh(d){
-  const got=[...new Set(d.items.map(basicOf).filter(b=>b&&settings.stock[b]))];
+  // отметка того же дня была до покупки, иначе она бы обнулила купленное
+  const got=[...new Set(d.items.map(basicOf).filter(b=>b&&settings.stock[b]?.at&&settings.stock[b].at<=d.date))];
   if(!got.length)return;
-  const stock={...settings.stock};got.forEach(b=>delete stock[b]);settings={...settings,stock};await saveSettings();
+  const stock={...settings.stock};got.forEach(b=>{const {s,at,...keep}=stock[b];stock[b]=keep});settings={...settings,stock};await saveSettings();
 }
 const download=(name,text,type)=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),10000)};
 async function restore(file){
@@ -338,8 +364,20 @@ const act={
   mode:v=>{if(busy)return;mode=v;recipes=null;return cook()},
   gobuy:()=>{tab='buy';scrollTo(0,0)},
   kit:()=>guard(()=>{settings={...settings,basics:Object.keys(KIT)};return saveSettings()}),
-  stock:(v,i)=>guard(()=>{settings={...settings,stock:{...settings.stock,[v]:{s:i,until:i==='ok'?plusDays(Math.max(2,Math.round(lasts(v).n*.75))):''}}};return saveSettings()}),
-  allok:()=>guard(()=>{const stock={...settings.stock};for(const b of settings.basics)if(!stateOf(b).s)stock[b]={s:'ok',until:plusDays(Math.max(2,Math.round(lasts(b).n*.75)))};settings={...settings,stock};return saveSettings()}),
+  stock:(v,i)=>guard(()=>{
+    // учимся: расчёт ошибся, значит темп у этого продукта другой
+    const old=settings.stock[v]||{},p=stateOf(v,true);let k=old.k||1;
+    if(p.frac!==undefined){if(i==='ok'&&p.frac<=.15)k*=.8;else if(i==='out'&&p.frac>=.5)k*=1.25;else if(i==='low'&&p.frac>=.7)k*=1.15}
+    settings={...settings,stock:{...settings.stock,[v]:{...old,s:i,at:today(),k:Math.min(3,Math.max(.33,k))}}};return saveSettings();
+  }),
+  allok:()=>guard(()=>{const stock={...settings.stock};for(const b of settings.basics)if(!stateOf(b).s)stock[b]={...stock[b],s:'ok',at:today()};settings={...settings,stock};return saveSettings()}),
+  cooked:v=>guard(()=>{
+    const r=recipes.list[+v],uses=r.uses.join(' ').toLowerCase(),stock={...settings.stock};
+    const hit=settings.basics.filter(b=>uses.includes(b.toLowerCase().slice(0,Math.max(3,b.length-2))));
+    for(const b of hit)stock[b]={...stock[b],used:[...(stock[b]?.used||[]),today()].slice(-10)};
+    settings={...settings,stock};msg=hit.length?'Списал: '+hit.join(', ').toLowerCase()+'.':'Блюдо отмечено.';
+    return saveSettings();
+  }),
   got:v=>act.stock(v,'ok'),
   gotx:v=>guard(()=>{settings={...settings,list:settings.list.filter(x=>x.id!==v)};return saveSettings()}),
   nobasic:v=>guard(()=>{const stock={...settings.stock};delete stock[v];settings={...settings,basics:settings.basics.filter(b=>b!==v),stock};return saveSettings()}),
@@ -412,7 +450,7 @@ for(const id of ['#shot','#pick'])$(id).addEventListener('change',e=>{const f=[.
 $('#load').addEventListener('change',e=>{const f=e.target.files[0];e.target.value='';if(f)restore(f)});
 
 const clean=(id,d)=>({id,store:String(d.store||'Магазин'),date:isDate(d.date)?d.date:today(),time:String(d.time||''),number:String(d.number||''),total:Math.round(toNum(d.total)),items:(Array.isArray(d.items)?d.items:[]).map(i=>({id:String(i.id||uidOf()),raw:String(i.raw||''),name:String(i.name||''),qty:toNum(i.qty)>0?toNum(i.qty):1,unit:i.unit==='кг'?'кг':'шт',sum:Math.round(toNum(i.sum)),cat:CATS.includes(i.cat)?i.cat:'Другое',gone:!!i.gone,...(typeof i.basic==='string'?{basic:i.basic}:{})})),...(d.review?{review:String(d.review).slice(0,100)}:{})});
-const cleanSet=d=>{const stock={};for(const[k,v]of Object.entries(d?.stock||{}))if(['ok','low','out'].includes(v?.s))stock[k]={s:v.s,until:String(v.until||'')};return {basics:(Array.isArray(d?.basics)?d.basics:[]).map(String),stock,list:(Array.isArray(d?.list)?d.list:[]).map(x=>({id:String(x?.id||uidOf()),name:String(x?.name||''),from:String(x?.from||'')})).filter(x=>x.name)}};
+const cleanSet=d=>{const stock={};for(const[k,v]of Object.entries(d?.stock||{})){if(!v||typeof v!=='object')continue;const e={};if(['ok','low','out'].includes(v.s)&&isDate(v.at)){e.s=v.s;e.at=v.at}if(toNum(v.k)>0)e.k=Math.min(3,Math.max(.33,toNum(v.k)));if(Array.isArray(v.used))e.used=v.used.filter(isDate).slice(-10);stock[k]=e}return {basics:(Array.isArray(d?.basics)?d.basics:[]).map(String),stock,list:(Array.isArray(d?.list)?d.list:[]).map(x=>({id:String(x?.id||uidOf()),name:String(x?.name||''),from:String(x?.from||'')})).filter(x=>x.name)}};
 let first=true;
 const firstMonth=()=>{if(first&&receipts.length){first=false;month=sorted()[0].date.slice(0,7)}};
 const cleanRec=d=>Array.isArray(d?.list)?{list:d.list.filter(x=>x&&MEALS[x.meal]).map(x=>({meal:x.meal,title:String(x.title||''),twist:String(x.twist||''),minutes:toNum(x.minutes),uses:x.uses||[],buy:x.buy||[],steps:x.steps||[]})),warn:String(d.warn||'')}:null;

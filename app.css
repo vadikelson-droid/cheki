@@ -88,3 +88,5 @@ nav svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:2;stro
 a{color:inherit;font-weight:600}
 #mailform input{margin-bottom:10px}
 .note .acts button{background:var(--nav);color:var(--key)}
+.lvl{grid-column:1/-1;height:6px;background:var(--fill);border-radius:3px;overflow:hidden}
+.lvl span{display:block;height:100%;background:var(--bar)}
