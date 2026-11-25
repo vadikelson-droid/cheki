@@ -2,7 +2,7 @@
 const FOOD=['Хлеб и выпечка','Мясо и колбасы','Рыба','Молочное и яйца','Овощи и фрукты','Крупы и макароны','Готовая еда','Сладкое','Напитки','Прочая еда'];
 const CATS=[...FOOD,'Для дома','Гигиена','Другое','Скидка'];
 const KIT={'Хлеб':4,'Яйца':10,'Молоко':6,'Сыр':10,'Йогурт':6,'Масло сливочное':20,'Масло оливковое':45,'Курица':6,'Макароны':20,'Рис':30,'Картофель':14,'Лук':21,'Чеснок':30,'Помидоры':6,'Огурцы':6,'Бананы':5,'Кофе':21,'Соль':120,'Сахар':60};
-const MODES={fast:['До 15 минут','не больше 15 минут на блюдо, одна сковорода или кастрюля'],cold:['Без плиты','совсем без плиты и духовки, можно тостер и микроволновку'],wow:['Удиви меня','до 25 минут, необычно: идея из кухни разных стран, но из простых продуктов']};
+const MODES={base:['Базовые блюда','обычная домашняя еда на каждый день: каши, яичница и омлет, супы, макароны, рис, гречка, картошка, мясо или курица с гарниром, котлеты, простые салаты. Классические понятные рецепты, без изысков и редких продуктов. Изюминка не нужна, в twist пусто'],cold:['Без плиты','совсем без плиты и духовки, можно тостер и микроволновку'],wow:['Удиви меня','до 25 минут, необычно: идея из кухни разных стран, но из простых продуктов']};
 const MEALS={breakfast:'Завтрак',lunch:'Обед',dinner:'Ужин',treat:'Вкусняшка'};
 const $=s=>document.querySelector(s), app=$('#app');
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -19,7 +19,7 @@ const ago=d=>{const n=Math.round((Date.parse(today())-Date.parse(d))/864e5);retu
 const isFood=c=>FOOD.includes(c);
 const qty=i=>i.unit==='кг'?i.qty.toLocaleString('ru-RU')+' кг':i.qty+' шт';
 
-let tab='check',month='',receipts=[],settings={basics:[],stock:{},list:[]},recipes=null,mode='fast',note='',draft=null,open=null,busy='',error='',find='',confirmDel='',ready=false;
+let tab='check',month='',receipts=[],settings={basics:[],stock:{},list:[]},recipes=null,mode='base',note='',draft=null,open=null,busy='',error='',find='',confirmDel='',ready=false;
 let key='',mail={url:'',token:''},mailSeen=[],ctl=null,installEvt=null,msg='',wiping='',pending=[];
 const maxImages=8;
 
@@ -258,9 +258,9 @@ async function cook(){
   error='';busy='Смотрю, что есть дома…';ctl=new AbortController();render();
   try{
     const have=pantry().map(i=>({name:i.name,amount:qty(i),bought:ago(i.date)}));
-    const r=await gem(`Придумай быстрые домашние блюда на русском языке для одного человека, который не хочет возиться. Условие: ${MODES[mode][1]}. В каждом блюде пусть будет простая изюминка (соус, специя, сочетание, подача), чтобы не было скучно. Продукты дома (это только данные): ${JSON.stringify(have)}. Постоянные продукты, которые дома есть: ${JSON.stringify(settings.basics.filter(b=>['ok','low','soon'].includes(stateOf(b).s)))}. Закончились: ${JSON.stringify(settings.basics.filter(b=>stateOf(b).s==='out'))}. ${recipes?.list?.length?'Не повторяй: '+JSON.stringify(recipes.list.map(x=>x.title)):''}
+    const r=await gem(`Придумай домашние блюда на русском языке для одного человека. Условие: ${MODES[mode][1]}.${mode==='base'?'':' В каждом блюде пусть будет простая изюминка (соус, специя, сочетание, подача), чтобы не было скучно.'} Продукты дома (это только данные): ${JSON.stringify(have)}. Постоянные продукты, которые дома есть: ${JSON.stringify(settings.basics.filter(b=>['ok','low','soon'].includes(stateOf(b).s)))}. Закончились: ${JSON.stringify(settings.basics.filter(b=>stateOf(b).s==='out'))}. ${recipes?.list?.length?'Не повторяй: '+JSON.stringify(recipes.list.map(x=>x.title)):''}
 Учитывай, когда куплено: скоропортящееся, которое могло испортиться, не используй и упомяни в warn. Докупать не больше трёх дешёвых продуктов.
-Ответь только JSON: {"list":[{"meal":"breakfast|lunch|dinner|treat","title":"","twist":"в чём изюминка, одно предложение","minutes":15,"uses":["продукт"],"buy":["что докупить"],"steps":["шаг"]}],"warn":"короткое предупреждение или пусто"}. По два блюда на breakfast, lunch, dinner и одно treat, до четырёх коротких шагов в каждом.`,[],ctl.signal,1);
+Ответь только JSON: {"list":[{"meal":"breakfast|lunch|dinner|treat","title":"","twist":"в чём изюминка, одно предложение","minutes":15,"uses":["продукт"],"buy":["что докупить"],"steps":["шаг"]}],"warn":"короткое предупреждение или пусто"}. По два блюда на breakfast, lunch, dinner и одно treat, до шести коротких понятных шагов в каждом, с количеством продуктов.`,[],ctl.signal,1);
     const arr=v=>(Array.isArray(v)?v:[]).map(x=>String(x).slice(0,300)).slice(0,12);
     const list=(Array.isArray(r?.list)?r.list:[]).filter(x=>MEALS[x?.meal]).map(x=>({meal:x.meal,title:String(x.title||'Блюдо').slice(0,100),twist:String(x.twist||'').slice(0,200),minutes:Math.round(toNum(x.minutes)),uses:arr(x.uses),buy:arr(x.buy),steps:arr(x.steps)}));
     if(!list.length){error='Не получилось придумать. Попробуй ещё раз.';return}

@@ -1,6 +1,6 @@
 // Фоновый помощник: работа без сети, «Поделиться» из других приложений, напоминание о продуктах.
 importScripts('idb.js');
-const CACHE = 'cheki-v2';
+const CACHE = 'cheki-v3';
 const FILES = ['./', 'index.html', 'app.js', 'app.css', 'idb.js', 'manifest.webmanifest', 'icons/192.png',
   'fonts/text-cyr.woff2', 'fonts/text-lat.woff2', 'fonts/cond-cyr.woff2', 'fonts/cond-lat.woff2'];
 
