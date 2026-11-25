@@ -90,3 +90,7 @@ a{color:inherit;font-weight:600}
 .note .acts button{background:var(--nav);color:var(--key)}
 .lvl{grid-column:1/-1;height:6px;background:var(--fill);border-radius:3px;overflow:hidden}
 .lvl span{display:block;height:100%;background:var(--bar)}
+.fam summary{font-weight:400}
+.fam summary small{font-size:14px}
+.fam .chips button{min-height:40px}
+.note.kid{background:light-dark(#e6f4ea,#1f3326)}
