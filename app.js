@@ -153,7 +153,7 @@ function viewBuy(){
 function viewCook(){
   const p=pantry();
   let h=`<h1>Что приготовить</h1><p style="margin:6px 0 14px">Из того, что куплено и ещё дома.</p>`;
-  if(key)h+=`<button class="main" style="width:100%" data-do="cook" ${busy?'disabled':''}>${recipes?'Придумать другие блюда':'Придумать блюда'}</button>`;
+  if(key)h+=`<button class="main" style="width:100%" data-do="cook" ${busy?'disabled':''}>${recipes?'Ещё варианты':'Придумать блюда'}: ${MODES[mode][0].toLowerCase()}</button>`;
   if(key)h+='<div class="chips onbg" style="margin-top:10px">'+Object.entries(MODES).map(([k,m])=>`<button data-do="mode" data-v="${k}" aria-pressed="${mode===k}">${m[0]}</button>`).join('')+'</div>';
   else if(ready)h+='<div class="note">Для рецептов нужен ключ Gemini. Он вставляется в настройках на вкладке «Чек».</div>';
   h+=status();
@@ -335,7 +335,7 @@ const act={
     return guard(async()=>{const isNew=!receipts.some(r=>r.id===d.id);delete d.review;await saveReceipt(d);if(isNew)await fresh(d);draft=null;navigator.storage?.persist?.().catch(()=>{});month=d.date.slice(0,7);open=d.id;tab='check';scrollTo(0,0)});
   },
   cook,
-  mode:v=>{mode=v},
+  mode:v=>{if(busy)return;mode=v;recipes=null;return cook()},
   gobuy:()=>{tab='buy';scrollTo(0,0)},
   kit:()=>guard(()=>{settings={...settings,basics:Object.keys(KIT)};return saveSettings()}),
   stock:(v,i)=>guard(()=>{settings={...settings,stock:{...settings.stock,[v]:{s:i,until:i==='ok'?plusDays(Math.max(2,Math.round(lasts(v).n*.75))):''}}};return saveSettings()}),
