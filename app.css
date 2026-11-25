@@ -1,0 +1,90 @@
+@font-face{font-family:"Sofia Sans";font-weight:400 700;src:url(fonts/text-cyr.woff2) format("woff2");unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116;font-display:swap}
+@font-face{font-family:"Sofia Sans";font-weight:400 700;src:url(fonts/text-lat.woff2) format("woff2");unicode-range:U+0000-00FF,U+2000-206F,U+20AC,U+2212;font-display:swap}
+@font-face{font-family:"Sofia Sans Condensed";font-weight:700 800;src:url(fonts/cond-cyr.woff2) format("woff2");unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116;font-display:swap}
+@font-face{font-family:"Sofia Sans Condensed";font-weight:700 800;src:url(fonts/cond-lat.woff2) format("woff2");unicode-range:U+0000-00FF,U+2000-206F,U+20AC,U+2212;font-display:swap}
+/* VOICE everyday, a money tool used in the shop and the kitchen
+   IDEA the yellow shelf price label over a strip of till paper
+   PICTURE the month's total set like a shelf price, with the receipt tape under it
+   COLOUR label yellow ground, black ink, white paper, tomato and leaf for prices up/down
+   TYPE Sofia Sans Condensed (price lettering) + Sofia Sans
+   LAYOUT one phone column with a bottom tab bar; on a laptop the same column, two where it helps */
+:root{color-scheme:light dark;--bg:light-dark(#ffd91a,#15140d);--ink:light-dark(#16130a,#fff6cf);--paper:light-dark(#fff,#26251b);--pink:light-dark(#16130a,#f4f0de);--soft:light-dark(#5d5740,#b9b296);--line:light-dark(#dedacb,#454333);--fill:light-dark(#f3f1e8,#33322a);--bar:light-dark(#16130a,#ffd91a);--up:light-dark(#c5221b,#ff8074);--down:light-dark(#0b6e36,#6bd894);--nav:light-dark(#16130a,#0b0a06);--key:#ffd91a}
+:root[data-theme=light]{color-scheme:light}
+:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+html{padding-top:env(safe-area-inset-top,0px);background:var(--bg)}
+[hidden]{display:none!important}
+body{margin:0;min-height:100dvh;background:var(--bg);color:var(--ink);font:400 16px/1.45 "Sofia Sans",system-ui,sans-serif;overflow-x:clip}
+main{max-width:760px;margin:0 auto;padding-block:18px calc(96px + env(safe-area-inset-bottom,0px));padding-left:max(5vw,16px,env(safe-area-inset-left,0px));padding-right:max(5vw,16px,env(safe-area-inset-right,0px))}
+h1,h2,h3,p{margin:0}
+h1,h2,.num{font-family:"Sofia Sans Condensed","Arial Narrow",sans-serif;font-weight:800;line-height:1.05;letter-spacing:-.01em}
+h1{font-size:34px}
+h2{font-size:24px;margin-bottom:10px}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer;border:0;min-height:44px;border-radius:8px;padding:8px 14px;background:var(--fill);color:var(--pink);font-weight:600}
+button:hover{filter:brightness(.95)}
+button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:3px solid var(--up);outline-offset:2px}
+button:disabled{opacity:.5;cursor:default}
+.main{background:var(--nav);color:var(--key);font-size:18px;min-height:56px}
+.ghost{background:transparent;color:inherit;box-shadow:inset 0 0 0 2px currentColor}
+.month{display:flex;align-items:center;justify-content:space-between;gap:8px;font-weight:700;font-size:18px}
+.month button{background:transparent;color:var(--ink);font-size:24px;min-width:44px;padding:0}
+.price{display:flex;justify-content:center;align-items:flex-start;font-size:clamp(84px,27vw,150px);padding-block:2px 0}
+.price sup{font-size:.42em;line-height:1.15;margin-left:.06em;vertical-align:baseline}
+.under{text-align:center;font-weight:600;margin-bottom:18px}
+.two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.paper{background:var(--paper);color:var(--pink);padding:18px 16px;margin-top:18px;border-radius:4px}
+.tape{border-radius:4px 4px 0 0;padding-bottom:30px;--z:9px;-webkit-mask:conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) 50%/calc(2*var(--z)) 100%;mask:conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) 50%/calc(2*var(--z)) 100%}
+.thead{display:flex;justify-content:space-between;gap:12px;align-items:baseline;border-bottom:2px dashed var(--line);padding-bottom:10px}
+.thead .num{font-size:26px}
+.row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding-block:9px;border-bottom:1px solid var(--line)}
+.row:last-child{border-bottom:0}
+.row button{align-self:center}
+.row b{font-weight:600}
+.row small,.mut{color:var(--soft);font-size:14px}
+.row .v{font-weight:700;white-space:nowrap;text-align:right;font-variant-numeric:tabular-nums}
+.sum{display:flex;justify-content:space-between;border-top:2px dashed var(--line);padding-top:12px;margin-top:4px}
+.sum .num{font-size:30px}
+.acts{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.cat{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding-block:8px}
+.cat i{grid-column:1/-1;height:12px;background:var(--fill);border-radius:3px;overflow:hidden}
+.cat i span{display:block;height:100%;background:var(--bar)}
+.up{color:var(--up)}
+.down{color:var(--down)}
+.note{background:var(--fill);color:var(--pink);border-radius:6px;padding:10px 12px;margin-top:12px}
+.bad{box-shadow:inset 0 0 0 2px var(--up)}
+.ok{box-shadow:inset 0 0 0 2px var(--down)}
+label{display:block;font-size:14px;color:var(--soft)}
+input[type=text],input[type=password],input[type=date],input[type=search],select{width:100%;min-height:44px;font-size:16px;background:var(--paper);color:var(--pink);border:1.5px solid var(--soft);border-radius:6px;padding:6px 10px}
+.ed{border-bottom:1px solid var(--line);padding-block:12px;display:grid;grid-template-columns:64px minmax(0,1fr) 40px 44px;gap:8px;align-items:end}
+.ed .w{grid-column:1/4}
+.ed .s{grid-column:3/5}
+.ed button{padding:0}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chips button{border-radius:99px}
+.chips button[aria-pressed=true]{background:var(--nav);color:var(--key)}
+.rec{border-bottom:1px solid var(--line);padding-block:6px}
+.rec:last-child{border-bottom:0}
+summary{cursor:pointer;min-height:44px;padding-block:8px;font-weight:600}
+summary small{display:block;font-weight:400;color:var(--soft);font-size:14px}
+ol{padding-left:22px;margin:8px 0}
+nav{position:fixed;inset:auto 0 0 0;background:var(--nav);display:grid;grid-template-columns:repeat(5,minmax(0,1fr));padding:6px max(8px,env(safe-area-inset-right,0px)) calc(6px + env(safe-area-inset-bottom,0px)) max(8px,env(safe-area-inset-left,0px));z-index:5}
+nav button{background:transparent;color:#d8d2b8;display:grid;justify-items:center;gap:2px;padding:6px 2px;font-size:14px;min-height:56px;position:relative}
+.badge{position:absolute;top:2px;left:calc(50% + 8px);min-width:20px;border-radius:10px;background:#d7261e;color:#fff;font-size:13px;line-height:20px;padding:0 5px}
+.seg{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) 44px;gap:6px;margin-top:4px}
+.seg button{padding:4px}
+.seg [aria-pressed=true]{background:var(--nav);color:var(--key)}
+.onbg button:not([aria-pressed=true]){background:var(--paper)}
+.addline{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;margin-top:12px}
+nav button[aria-current=page]{color:var(--key)}
+nav svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.load{height:6px;border-radius:3px;background:var(--fill);overflow:hidden;margin-top:12px}
+.load span{display:block;width:35%;height:100%;background:var(--bar);animation:go 1.4s ease-in-out infinite alternate}
+@keyframes go{to{margin-left:65%}}
+@media(prefers-reduced-motion:reduce){.load span{animation:none;width:100%}}
+.gear{position:absolute;top:calc(10px + env(safe-area-inset-top,0px));right:max(12px,env(safe-area-inset-right,0px));background:transparent;color:var(--ink);padding:10px;z-index:2}
+.gear svg{width:26px;height:26px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;display:block}
+.month{padding-right:48px}
+a{color:inherit;font-weight:600}
+#mailform input{margin-bottom:10px}
+.note .acts button{background:var(--nav);color:var(--key)}
